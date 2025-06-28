@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   fetchUserPlaylists,
@@ -29,6 +29,8 @@ const Playlists: React.FC = () => {
     null
   );
   const [songFetchError, setSongFetchError] = useState<string | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
 
   const loadPlaylists = async () => {
     setIsLoading(true);
@@ -93,13 +95,12 @@ const Playlists: React.FC = () => {
     }
   };
 
-  // --- UPDATED: This function now queues the rest of the songs ---
   const handlePlayPlaylist = () => {
     if (selectedPlaylistSongs.length > 0) {
       const firstSong = selectedPlaylistSongs[0];
       const restOfSongs = selectedPlaylistSongs.slice(1);
-      setQueue(restOfSongs); // Set the queue with the songs that follow
-      playSong(firstSong); // Play the first song immediately
+      setQueue(restOfSongs);
+      playSong(firstSong);
     }
   };
 
@@ -112,14 +113,13 @@ const Playlists: React.FC = () => {
     return newArray;
   };
 
-  // --- UPDATED: This function now queues the rest of the shuffled songs ---
   const handleShufflePlay = () => {
     if (selectedPlaylistSongs.length > 0) {
       const shuffledSongs = shuffleArray(selectedPlaylistSongs);
       const firstSong = shuffledSongs[0];
       const restOfSongs = shuffledSongs.slice(1);
-      setQueue(restOfSongs); // Set the queue with the rest of the shuffled songs
-      playSong(firstSong); // Play the first song from the shuffled list
+      setQueue(restOfSongs);
+      playSong(firstSong);
     }
   };
 
@@ -136,6 +136,28 @@ const Playlists: React.FC = () => {
     }
   };
 
+  // Updated filtering: filter by playlist name OR creator (case-insensitive)
+  const filteredPlaylists = useMemo(() => {
+    const playlists = activeTab === "my" ? myPlaylists : publicPlaylists;
+    if (!searchTerm) return playlists;
+    const lowerSearch = searchTerm.toLowerCase();
+    return playlists.filter(
+      (p) =>
+        p.name.toLowerCase().includes(lowerSearch) ||
+        (p.creator && p.creator.toLowerCase().includes(lowerSearch))
+    );
+  }, [searchTerm, activeTab, myPlaylists, publicPlaylists]);
+
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchTerm(e.target.value);
+      setSelectedPlaylist(null);
+      setSelectedPlaylistSongs([]);
+      setSongFetchError(null);
+    },
+    []
+  );
+
   if (isLoading) {
     return <div className="text-center mt-5">Loading playlists...</div>;
   }
@@ -148,12 +170,18 @@ const Playlists: React.FC = () => {
     <div className="container mt-4 text-light">
       <h2 className="mb-4">Playlists</h2>
 
-      <ul className="nav nav-tabs mb-4">
+      <ul className="nav nav-tabs mb-3">
         <li className="nav-item">
           <a
             className={`nav-link ${activeTab === "my" ? "active" : ""}`}
             href="#"
-            onClick={() => setActiveTab("my")}
+            onClick={() => {
+              setActiveTab("my");
+              setSearchTerm("");
+              setSelectedPlaylist(null);
+              setSelectedPlaylistSongs([]);
+              setSongFetchError(null);
+            }}
           >
             My Playlists
           </a>
@@ -162,12 +190,31 @@ const Playlists: React.FC = () => {
           <a
             className={`nav-link ${activeTab === "public" ? "active" : ""}`}
             href="#"
-            onClick={() => setActiveTab("public")}
+            onClick={() => {
+              setActiveTab("public");
+              setSearchTerm("");
+              setSelectedPlaylist(null);
+              setSelectedPlaylistSongs([]);
+              setSongFetchError(null);
+            }}
           >
             Public Playlists
           </a>
         </li>
       </ul>
+
+      {/* Search bar */}
+      <div className="mb-3">
+        <input
+          type="search"
+          className="form-control"
+          placeholder={`Search ${
+            activeTab === "my" ? "my" : "public"
+          } playlists by name or creator...`}
+          value={searchTerm}
+          onChange={handleSearchChange}
+        />
+      </div>
 
       <div className="row">
         <div className="col-md-6">
@@ -181,11 +228,15 @@ const Playlists: React.FC = () => {
                   ➕ Create New Playlist
                 </button>
               </div>
-              {(myPlaylists?.length ?? 0) === 0 ? (
-                <p>You don't have any playlists yet.</p>
+              {filteredPlaylists.length === 0 ? (
+                <p>
+                  {searchTerm
+                    ? "No playlists found matching your search."
+                    : "You don't have any playlists yet."}
+                </p>
               ) : (
                 <ul className="list-group">
-                  {myPlaylists.map((playlist) => (
+                  {filteredPlaylists.map((playlist) => (
                     <li
                       key={playlist.uuid}
                       className={`list-group-item list-group-item-action bg-secondary text-light border-dark mb-2 rounded ${
@@ -204,11 +255,15 @@ const Playlists: React.FC = () => {
 
           {activeTab === "public" && (
             <>
-              {(publicPlaylists?.length ?? 0) === 0 ? (
-                <p>No public playlists found.</p>
+              {filteredPlaylists.length === 0 ? (
+                <p>
+                  {searchTerm
+                    ? "No public playlists found matching your search."
+                    : "No public playlists found."}
+                </p>
               ) : (
                 <ul className="list-group">
-                  {publicPlaylists.map((playlist) => (
+                  {filteredPlaylists.map((playlist) => (
                     <li
                       key={playlist.uuid}
                       className={`list-group-item list-group-item-action bg-secondary text-light border-dark mb-2 rounded ${
